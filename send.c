@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
@@ -11,6 +12,7 @@
 #include <linux/if_ether.h>
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
+#include <netinet/in.h>
 
 
 #include <netinet/ether.h>
@@ -43,6 +45,19 @@ unsigned char destination_address[4];
 
 
 } ip;
+
+struct ipv6_header
+{
+    unsigned int
+        version : 4,
+        traffic_class : 8,
+        flow_label : 20;
+    uint16_t length;
+    uint8_t  next_header;
+    uint8_t  hop_limit;
+    struct in6_addr src;
+    struct in6_addr dst;
+} ipv6_header;
 
 
 unsigned short in_cksum(unsigned short *addr,int len)
@@ -81,11 +96,20 @@ int main(int argc, char **argv)
   char buffer[BUFFER_LEN], dummyBuf[50]; // 1 char tem 8 bits
   struct sockaddr_ll destAddr;
   struct ip ip_pacote;
+  struct ipv6_header ipv6;
   short int etherTypeT = htons(0x8200);
 
   /* Configura MAC Origem e Destino */
   MacAddress localMac = {0x00, 0x0B, 0xCD, 0xA8, 0x6D, 0x91};
   MacAddress destMac = {0x00, 0x17, 0x9A, 0xB3, 0x9E, 0x16};
+
+  ipv6.version = htons(6);
+  ipv6.traffic_class = 0;
+  ipv6.flow_label = 0;
+  ipv6.length = sizeof(ipv6_header);
+  ipv6.next_header = htons(6);
+  ipv6.hop_limit = 255;
+  inet_pton(AF_INET6, "::1", &(ipv6.src));
 
   /* Cabecalho IP */
 
@@ -95,8 +119,9 @@ int main(int argc, char **argv)
   ip_pacote.total_lenght = 5000;
   ip_pacote.flags = 0;
   ip_pacote.protocol = 6; //tcp
-  strcpy(ip_pacote.source_address, argv[0]);
-  strcpy(ip_pacote.destination_address,argv[1]);
+  strcpy(ip_pacote.source_address, argv[1]);
+  strcpy(ip_pacote.destination_address,argv[2]);
+  ip_pacote.checksum = in_cksum((unsigned short*)&ip_pacote, sizeof(ip_pacote));
     
 
   /* Criacao do socket. Todos os pacotes devem ser construidos a partir do protocolo Ethernet. */
@@ -111,7 +136,7 @@ int main(int argc, char **argv)
   destAddr.sll_family = htons(PF_PACKET);
   destAddr.sll_protocol = htons(ETH_P_ALL);
   destAddr.sll_halen = 6;
-  destAddr.sll_ifindex = 2;  /* indice da interface pela qual os pacotes serao enviados. Eh necess�rio conferir este valor. */
+  destAddr.sll_ifindex = 2;  /* indice da interface pela qual os pacotes serao enviados. Eh necessario conferir este valor. */
   memcpy(&(destAddr.sll_addr), destMac, MAC_ADDR_LEN);
 
   /* Cabecalho Ethernet */
